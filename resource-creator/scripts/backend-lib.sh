@@ -279,3 +279,29 @@ restore_eks_private_only() {
 
   aws eks wait cluster-active --name "$cluster_name" --region "$region"
 }
+
+wait_for_eks_active() {
+  local cluster_name="$1"
+  local region="$2"
+  aws eks wait cluster-active --name "$cluster_name" --region "$region"
+}
+
+resolve_kube_context() {
+  local cluster_name="$1"
+  local exact=""
+  local fuzzy=""
+
+  exact="$(kubectl config get-contexts -o name 2>/dev/null | awk -v c="$cluster_name" '$0==c {print; exit}')"
+  if [[ -n "$exact" ]]; then
+    echo "$exact"
+    return 0
+  fi
+
+  fuzzy="$(kubectl config get-contexts -o name 2>/dev/null | awk -v c="$cluster_name" 'index($0,c)>0 {print; exit}')"
+  if [[ -n "$fuzzy" ]]; then
+    echo "$fuzzy"
+    return 0
+  fi
+
+  return 1
+}

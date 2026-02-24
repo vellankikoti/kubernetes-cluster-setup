@@ -49,12 +49,17 @@ fi
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 TMP_DIR="$(mktemp -d)"
 source "${ROOT_DIR}/scripts/backend-lib.sh"
+PREV_CONTEXT="$(kubectl config current-context 2>/dev/null || true)"
+TARGET_CONTEXT=""
 
 AWS_PUBLIC_API_TEMP_ENABLED="false"
 cleanup() {
   if [[ "$CLOUD" == "aws" && "$PUBLIC_API" == "true" && "$AWS_PUBLIC_API_TEMP_ENABLED" == "true" ]]; then
     # Best practice: keep EKS API private by default. Public API is temporary for operator access only.
     restore_eks_private_only "$CLUSTER_NAME" "$REGION" || true
+  fi
+  if [[ -n "$PREV_CONTEXT" ]]; then
+    kubectl config use-context "$PREV_CONTEXT" >/dev/null 2>&1 || true
   fi
   rm -rf "$TMP_DIR"
 }
@@ -66,6 +71,7 @@ done
 
 if [[ "$CLOUD" == "aws" ]]; then
   command -v aws >/dev/null 2>&1 || { echo "missing command: aws"; exit 1; }
+  wait_for_eks_active "$CLUSTER_NAME" "$REGION"
   aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$REGION" --alias "$CLUSTER_NAME" >/dev/null
 
   if ! kube_api_reachable; then
@@ -88,6 +94,16 @@ if [[ "$CLOUD" == "aws" ]]; then
   fi
 fi
 
+TARGET_CONTEXT="$(resolve_kube_context "$CLUSTER_NAME" || true)"
+if [[ -z "$TARGET_CONTEXT" ]]; then
+  echo "unable to resolve kube context for cluster: $CLUSTER_NAME"
+  exit 1
+fi
+
+kctl() {
+  kubectl --context "$TARGET_CONTEXT" "$@"
+}
+
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx >/dev/null
 helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ >/dev/null
 helm repo add autoscaler https://kubernetes.github.io/autoscaler >/dev/null
@@ -96,7 +112,7 @@ helm repo update >/dev/null
 # Best practice: don't render ServiceMonitor resources unless Prometheus Operator CRDs exist.
 # Fresh clusters in this factory do not install kube-prometheus-stack in bootstrap by default.
 NGINX_EXTRA_VALUES=""
-if ! kubectl get crd servicemonitors.monitoring.coreos.com >/dev/null 2>&1; then
+if ! kctl get crd servicemonitors.monitoring.coreos.com >/dev/null 2>&1; then
   cat > "${TMP_DIR}/nginx-no-servicemonitor.yaml" <<YAML
 controller:
   metrics:
@@ -106,29 +122,32 @@ YAML
   NGINX_EXTRA_VALUES="-f ${TMP_DIR}/nginx-no-servicemonitor.yaml"
 fi
 
-kubectl apply -f "${ROOT_DIR}/common-resources/namespaces.yaml"
-kubectl apply -f "${ROOT_DIR}/common-resources/priority-classes.yaml"
-kubectl apply -f "${ROOT_DIR}/common-resources/network-policies.yaml"
-kubectl apply -f "${ROOT_DIR}/common-resources/resource-quotas.yaml"
-kubectl apply -f "${ROOT_DIR}/common-resources/limit-ranges.yaml"
-kubectl apply -f "${ROOT_DIR}/common-resources/pod-disruption-budgets.yaml"
+kctl apply -f "${ROOT_DIR}/common-resources/namespaces.yaml"
+kctl apply -f "${ROOT_DIR}/common-resources/priority-classes.yaml"
+kctl apply -f "${ROOT_DIR}/common-resources/network-policies.yaml"
+kctl apply -f "${ROOT_DIR}/common-resources/resource-quotas.yaml"
+kctl apply -f "${ROOT_DIR}/common-resources/limit-ranges.yaml"
+kctl apply -f "${ROOT_DIR}/common-resources/pod-disruption-budgets.yaml"
 
 if [[ -n "$NGINX_EXTRA_VALUES" ]]; then
   # shellcheck disable=SC2086
   helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
     -n ingress-nginx --create-namespace \
+    --kube-context "$TARGET_CONTEXT" \
     -f "${ROOT_DIR}/addons/ingress/nginx-values.yaml" \
     $NGINX_EXTRA_VALUES \
     --wait --timeout 15m
 else
   helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
     -n ingress-nginx --create-namespace \
+    --kube-context "$TARGET_CONTEXT" \
     -f "${ROOT_DIR}/addons/ingress/nginx-values.yaml" \
     --wait --timeout 15m
 fi
 
 helm upgrade --install metrics-server metrics-server/metrics-server \
   -n kube-system \
+  --kube-context "$TARGET_CONTEXT" \
   -f "${ROOT_DIR}/addons/observability/metrics-server-values.yaml" \
   --wait --timeout 10m
 
@@ -136,7 +155,7 @@ case "$CLOUD" in
   aws)
     [[ -n "$AUTOSCALER_ROLE_ARN" ]] || { echo "--autoscaler-role-arn is required for aws"; exit 1; }
 
-    kubectl apply -f "${ROOT_DIR}/addons/storage/eks-gp3-storageclass.yaml"
+    kctl apply -f "${ROOT_DIR}/addons/storage/eks-gp3-storageclass.yaml"
 
     cat > "${TMP_DIR}/cluster-autoscaler-values.yaml" <<YAML
 cloudProvider: aws
@@ -146,11 +165,12 @@ autoDiscovery:
 awsRegion: ${REGION}
 rbac:
   create: true
-serviceAccount:
-  create: true
-  name: cluster-autoscaler
-  annotations:
-    eks.amazonaws.com/role-arn: ${AUTOSCALER_ROLE_ARN}
+  serviceAccount:
+    create: true
+    name: cluster-autoscaler
+    annotations:
+      eks.amazonaws.com/role-arn: ${AUTOSCALER_ROLE_ARN}
+    automountServiceAccountToken: true
 extraArgs:
   balance-similar-node-groups: true
   expander: least-waste
@@ -171,14 +191,18 @@ resources:
 YAML
 
     helm upgrade --install cluster-autoscaler autoscaler/cluster-autoscaler \
-      -n kube-system -f "${TMP_DIR}/cluster-autoscaler-values.yaml" \
+      -n kube-system --kube-context "$TARGET_CONTEXT" -f "${TMP_DIR}/cluster-autoscaler-values.yaml" \
       --wait --timeout 10m
+
+    # Ensure pods are recreated so fresh IRSA token/web identity env is projected.
+    kctl -n kube-system rollout restart deployment/cluster-autoscaler >/dev/null
+    kctl -n kube-system rollout status deployment/cluster-autoscaler --timeout=600s >/dev/null
     ;;
   gcp)
-    kubectl apply -f "${ROOT_DIR}/addons/storage/gke-pd-storageclass.yaml"
+    kctl apply -f "${ROOT_DIR}/addons/storage/gke-pd-storageclass.yaml"
     ;;
   azure)
-    kubectl apply -f "${ROOT_DIR}/addons/storage/aks-disk-file-storageclasses.yaml"
+    kctl apply -f "${ROOT_DIR}/addons/storage/aks-disk-file-storageclasses.yaml"
     ;;
   *)
     echo "invalid cloud: $CLOUD"
@@ -186,11 +210,11 @@ YAML
     ;;
 esac
 
-kubectl wait --for=condition=Available deployment/ingress-nginx-controller -n ingress-nginx --timeout=600s
-kubectl wait --for=condition=Available deployment/metrics-server -n kube-system --timeout=600s
+kctl wait --for=condition=Available deployment/ingress-nginx-controller -n ingress-nginx --timeout=600s
+kctl wait --for=condition=Available deployment/metrics-server -n kube-system --timeout=600s
 
 if [[ "$CLOUD" == "aws" ]]; then
-  kubectl wait --for=condition=Available deployment/cluster-autoscaler -n kube-system --timeout=600s
+  kctl wait --for=condition=Available deployment/cluster-autoscaler -n kube-system --timeout=600s
 fi
 
 echo "Bootstrap completed for ${CLUSTER_NAME} (${CLOUD})"

@@ -199,14 +199,19 @@ VAL_OUT="$(${ROOT_DIR}/scripts/validation.sh "${VAL_ARGS[@]}")"
 
 echo "$VAL_OUT"
 
-K8S_VER="$(kubectl version -o jsonpath='{.serverVersion.gitVersion}')"
-NODE_COUNT="$(kubectl get nodes --no-headers | wc -l | tr -d ' ')"
-NODES_OUT="$(kubectl get nodes -o wide)"
+KUBE_CONTEXT="$(echo "$VAL_OUT" | awk -F= '/^KUBE_CONTEXT=/{print $2}')"
+if [[ -z "$KUBE_CONTEXT" ]]; then
+  KUBE_CONTEXT="$CLUSTER_NAME"
+fi
+
+K8S_VER="$(kubectl --context "$KUBE_CONTEXT" version -o jsonpath='{.serverVersion.gitVersion}')"
+NODE_COUNT="$(kubectl --context "$KUBE_CONTEXT" get nodes --no-headers | wc -l | tr -d ' ')"
+NODES_OUT="$(kubectl --context "$KUBE_CONTEXT" get nodes -o wide)"
 INGRESS_ENDPOINT="$(echo "$VAL_OUT" | awk -F= '/^INGRESS_ENDPOINT=/{print $2}')"
 DEFAULT_SC="$(echo "$VAL_OUT" | awk -F= '/^DEFAULT_STORAGE_CLASS=/{print $2}')"
 
 if [[ "$CLOUD" == "aws" ]]; then
-  AUTOSCALER_STATUS="$(kubectl -n kube-system get deploy cluster-autoscaler -o jsonpath='{.status.availableReplicas}')"
+  AUTOSCALER_STATUS="$(kubectl --context "$KUBE_CONTEXT" -n kube-system get deploy cluster-autoscaler -o jsonpath='{.status.availableReplicas}')"
 else
   AUTOSCALER_STATUS="native"
 fi
