@@ -32,7 +32,7 @@ require_cmd() {
 
 check_aws_quotas() {
   local region="$1"
-  local required_vcpu="24"
+  local required_vcpu="4"
 
   local vcpu_quota
   vcpu_quota="$(aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A --region "$region" --query 'Quota.Value' --output text 2>/dev/null || echo 0)"

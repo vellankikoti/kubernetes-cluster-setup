@@ -1,9 +1,9 @@
 locals {
   env_config = {
-    dev     = { cidr = "10.20.0.0/16", min = 1, desired = 2, max = 6 }
-    qa      = { cidr = "10.21.0.0/16", min = 1, desired = 2, max = 6 }
-    staging = { cidr = "10.22.0.0/16", min = 2, desired = 3, max = 10 }
-    prod    = { cidr = "10.23.0.0/16", min = 3, desired = 6, max = 20 }
+    dev     = { cidr = "10.20.0.0/16", min = 1, desired = 1, max = 2 }
+    qa      = { cidr = "10.21.0.0/16", min = 1, desired = 1, max = 2 }
+    staging = { cidr = "10.22.0.0/16", min = 1, desired = 1, max = 3 }
+    prod    = { cidr = "10.23.0.0/16", min = 2, desired = 2, max = 6 }
   }
 
   selected = { for e in var.environments : e => local.env_config[e] }
@@ -98,14 +98,14 @@ module "eks" {
   subnet_ids               = module.vpc[each.key].private_subnets
   control_plane_subnet_ids = module.vpc[each.key].private_subnets
 
-  create_kms_key                  = true
-  cluster_encryption_config       = { resources = ["secrets"] }
-  enable_irsa                     = true
-  authentication_mode             = "API_AND_CONFIG_MAP"
-  cloudwatch_log_group_retention_in_days = each.key == "prod" ? 30 : 14
+  create_kms_key                         = true
+  cluster_encryption_config              = { resources = ["secrets"] }
+  enable_irsa                            = true
+  authentication_mode                    = "API_AND_CONFIG_MAP"
+  cloudwatch_log_group_retention_in_days = each.key == "prod" ? 14 : 7
 
   cluster_addons = {
-    coredns = { most_recent = true }
+    coredns    = { most_recent = true }
     kube-proxy = { most_recent = true }
     vpc-cni = {
       most_recent = true
@@ -121,7 +121,7 @@ module "eks" {
   eks_managed_node_groups = {
     on_demand = {
       ami_type       = "AL2023_x86_64_STANDARD"
-      instance_types = ["m7i.large"]
+      instance_types = ["t3.medium"]
       capacity_type  = "ON_DEMAND"
       min_size       = each.value.min
       max_size       = each.value.max
@@ -133,18 +133,18 @@ module "eks" {
         max_unavailable_percentage = 25
       }
       tags = {
-        "k8s.io/cluster-autoscaler/enabled"                                 = "true"
+        "k8s.io/cluster-autoscaler/enabled"                          = "true"
         "k8s.io/cluster-autoscaler/${var.base_name}-${each.key}-eks" = "owned"
       }
     }
 
     spot = {
-      ami_type       = "AL2023_ARM_64_STANDARD"
-      instance_types = ["m7g.large", "m7g.xlarge", "c7g.large"]
+      ami_type       = "AL2023_x86_64_STANDARD"
+      instance_types = ["t3a.medium", "t3.medium"]
       capacity_type  = "SPOT"
-      min_size       = each.key == "prod" ? 2 : 1
-      max_size       = each.value.max * 2
-      desired_size   = each.key == "prod" ? 4 : 2
+      min_size       = each.key == "prod" ? 1 : 0
+      max_size       = each.value.max
+      desired_size   = each.key == "prod" ? 1 : 0
       taints = {
         spot = {
           key    = "spot"
@@ -159,7 +159,7 @@ module "eks" {
         max_unavailable_percentage = 25
       }
       tags = {
-        "k8s.io/cluster-autoscaler/enabled"                                 = "true"
+        "k8s.io/cluster-autoscaler/enabled"                          = "true"
         "k8s.io/cluster-autoscaler/${var.base_name}-${each.key}-eks" = "owned"
       }
     }
@@ -256,11 +256,11 @@ data "aws_eks_addon_version" "efs_csi" {
 }
 
 resource "aws_eks_addon" "ebs_csi" {
-  for_each                 = local.selected
-  cluster_name             = module.eks[each.key].cluster_name
-  addon_name               = "aws-ebs-csi-driver"
-  addon_version            = data.aws_eks_addon_version.ebs_csi[each.key].version
-  service_account_role_arn = module.irsa_ebs_csi[each.key].iam_role_arn
+  for_each                    = local.selected
+  cluster_name                = module.eks[each.key].cluster_name
+  addon_name                  = "aws-ebs-csi-driver"
+  addon_version               = data.aws_eks_addon_version.ebs_csi[each.key].version
+  service_account_role_arn    = module.irsa_ebs_csi[each.key].iam_role_arn
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
 
@@ -274,11 +274,11 @@ resource "aws_eks_addon" "ebs_csi" {
 }
 
 resource "aws_eks_addon" "efs_csi" {
-  for_each                 = local.selected
-  cluster_name             = module.eks[each.key].cluster_name
-  addon_name               = "aws-efs-csi-driver"
-  addon_version            = data.aws_eks_addon_version.efs_csi[each.key].version
-  service_account_role_arn = module.irsa_efs_csi[each.key].iam_role_arn
+  for_each                    = local.selected
+  cluster_name                = module.eks[each.key].cluster_name
+  addon_name                  = "aws-efs-csi-driver"
+  addon_version               = data.aws_eks_addon_version.efs_csi[each.key].version
+  service_account_role_arn    = module.irsa_efs_csi[each.key].iam_role_arn
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
 
