@@ -56,8 +56,13 @@ case "$CLOUD" in
   aws)
     ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
     SUFFIX="${ACCOUNT_ID: -6}"
-    BASE_NAME="$(sanitize_name "${NAME}-aws-${SUFFIX}")"
-    CLUSTER_NAME="${BASE_NAME}-${ENV_NAME}-eks"
+    if [[ "$NAME" == *"-${ENV_NAME}-eks" ]]; then
+      CLUSTER_NAME="$(sanitize_name "$NAME")"
+      BASE_NAME="${CLUSTER_NAME%-${ENV_NAME}-eks}"
+    else
+      BASE_NAME="$(sanitize_name "${NAME}-aws-${SUFFIX}")"
+      CLUSTER_NAME="${BASE_NAME}-${ENV_NAME}-eks"
+    fi
 
     cat > "$TF_VARS_FILE" <<TFVARS
 region          = "${REGION}"
@@ -75,8 +80,13 @@ TFVARS
     [[ -n "$PROJECT_ID" && "$PROJECT_ID" != "(unset)" ]] || { echo "gcloud project is not set"; exit 1; }
     CALLER_IP="$(get_public_ip)"
     PROJ_HASH="$(hash8 "$PROJECT_ID")"
-    BASE_NAME="$(sanitize_name "${NAME}-gcp-${PROJ_HASH}")"
-    CLUSTER_NAME="${BASE_NAME}-${ENV_NAME}-gke"
+    if [[ "$NAME" == *"-${ENV_NAME}-gke" ]]; then
+      CLUSTER_NAME="$(sanitize_name "$NAME")"
+      BASE_NAME="${CLUSTER_NAME%-${ENV_NAME}-gke}"
+    else
+      BASE_NAME="$(sanitize_name "${NAME}-gcp-${PROJ_HASH}")"
+      CLUSTER_NAME="${BASE_NAME}-${ENV_NAME}-gke"
+    fi
 
     if [[ "$PUBLIC_API" == "true" ]]; then
       GKE_PRIVATE_ENDPOINT="false"
@@ -101,8 +111,13 @@ TFVARS
   azure)
     SUB_ID="$(az account show --query id -o tsv)"
     SUB_HASH="$(hash8 "$SUB_ID")"
-    BASE_NAME="$(sanitize_name "${NAME}-az-${SUB_HASH}")"
-    CLUSTER_NAME="${BASE_NAME}-${ENV_NAME}-aks"
+    if [[ "$NAME" == *"-${ENV_NAME}-aks" ]]; then
+      CLUSTER_NAME="$(sanitize_name "$NAME")"
+      BASE_NAME="${CLUSTER_NAME%-${ENV_NAME}-aks}"
+    else
+      BASE_NAME="$(sanitize_name "${NAME}-az-${SUB_HASH}")"
+      CLUSTER_NAME="${BASE_NAME}-${ENV_NAME}-aks"
+    fi
 
     cat > "$TF_VARS_FILE" <<TFVARS
 subscription_id = "${SUB_ID}"

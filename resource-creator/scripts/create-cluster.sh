@@ -68,8 +68,13 @@ case "$CLOUD" in
 
     ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
     SUFFIX="${ACCOUNT_ID: -6}"
-    BASE_NAME="$(sanitize_name "${NAME}-aws-${SUFFIX}")"
-    CLUSTER_NAME="${BASE_NAME}-${ENV_NAME}-eks"
+    if [[ "$NAME" == *"-${ENV_NAME}-eks" ]]; then
+      CLUSTER_NAME="$(sanitize_name "$NAME")"
+      BASE_NAME="${CLUSTER_NAME%-${ENV_NAME}-eks}"
+    else
+      BASE_NAME="$(sanitize_name "${NAME}-aws-${SUFFIX}")"
+      CLUSTER_NAME="${BASE_NAME}-${ENV_NAME}-eks"
+    fi
 
     TF_STACK="eks"
     TF_VARS_FILE="${TMP_DIR}/vars.tfvars"
@@ -94,8 +99,13 @@ TFVARS
     check_gcp_quotas_and_apis "$REGION" "$PROJECT_ID"
 
     PROJ_HASH="$(hash8 "$PROJECT_ID")"
-    BASE_NAME="$(sanitize_name "${NAME}-gcp-${PROJ_HASH}")"
-    CLUSTER_NAME="${BASE_NAME}-${ENV_NAME}-gke"
+    if [[ "$NAME" == *"-${ENV_NAME}-gke" ]]; then
+      CLUSTER_NAME="$(sanitize_name "$NAME")"
+      BASE_NAME="${CLUSTER_NAME%-${ENV_NAME}-gke}"
+    else
+      BASE_NAME="$(sanitize_name "${NAME}-gcp-${PROJ_HASH}")"
+      CLUSTER_NAME="${BASE_NAME}-${ENV_NAME}-gke"
+    fi
 
     TF_STACK="gke"
     TF_VARS_FILE="${TMP_DIR}/vars.tfvars"
@@ -128,8 +138,13 @@ TFVARS
     check_azure_quotas "$REGION"
 
     SUB_HASH="$(hash8 "$SUB_ID")"
-    BASE_NAME="$(sanitize_name "${NAME}-az-${SUB_HASH}")"
-    CLUSTER_NAME="${BASE_NAME}-${ENV_NAME}-aks"
+    if [[ "$NAME" == *"-${ENV_NAME}-aks" ]]; then
+      CLUSTER_NAME="$(sanitize_name "$NAME")"
+      BASE_NAME="${CLUSTER_NAME%-${ENV_NAME}-aks}"
+    else
+      BASE_NAME="$(sanitize_name "${NAME}-az-${SUB_HASH}")"
+      CLUSTER_NAME="${BASE_NAME}-${ENV_NAME}-aks"
+    fi
 
     TF_STACK="aks"
     TF_VARS_FILE="${TMP_DIR}/vars.tfvars"
