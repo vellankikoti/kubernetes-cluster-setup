@@ -1,0 +1,25 @@
+server:
+  replicas: 2
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - argocd.example.com
+    tls:
+      - hosts:
+          - argocd.example.com
+        secretName: argocd-tls
+  config:
+    url: https://argocd.example.com
+    oidc.config: |
+      name: SSO
+      issuer: https://auth.example.com/realms/platform
+      clientID: argocd
+      clientSecret: $oidc.clientSecret
+      requestedScopes: ["openid", "profile", "email", "groups"]
+repoServer:
+  replicas: 2
+controller:
+  replicas: 2
+redis-ha:
+  enabled: true

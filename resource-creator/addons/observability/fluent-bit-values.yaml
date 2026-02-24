@@ -1,0 +1,15 @@
+serviceAccount:
+  create: true
+backend:
+  type: stdout
+filters:
+  kubernetes:
+    merge_log: On
+    keep_log: Off
+resources:
+  limits:
+    cpu: 300m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi

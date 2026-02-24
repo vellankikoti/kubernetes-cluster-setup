@@ -1,0 +1,11 @@
+provider: google
+policy: sync
+txtOwnerId: multi-cloud-platform
+serviceAccount:
+  create: true
+  name: external-dns
+sources:
+  - service
+  - ingress
+registry: txt
+interval: 1m

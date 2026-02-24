@@ -1,0 +1,13 @@
+controller:
+  replicaCount: 3
+  allowSnippetAnnotations: false
+  service:
+    externalTrafficPolicy: Local
+  config:
+    use-forwarded-headers: "true"
+    server-tokens: "false"
+    ssl-protocols: TLSv1.2 TLSv1.3
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true

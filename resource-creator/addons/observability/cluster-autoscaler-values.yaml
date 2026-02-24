@@ -1,0 +1,26 @@
+cloudProvider: aws
+fullnameOverride: cluster-autoscaler
+autoDiscovery:
+  clusterName: platform
+awsRegion: us-east-1
+rbac:
+  create: true
+serviceAccount:
+  create: true
+  name: cluster-autoscaler
+extraArgs:
+  balance-similar-node-groups: true
+  expander: least-waste
+  skip-nodes-with-system-pods: false
+  scale-down-utilization-threshold: 0.5
+  scale-down-unneeded-time: 10m
+  stderrthreshold: info
+image:
+  tag: v1.34.0
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    cpu: 300m
+    memory: 1Gi

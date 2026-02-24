@@ -1,0 +1,7 @@
+installCRDs: true
+prometheus:
+  enabled: true
+webhook:
+  replicaCount: 2
+cainjector:
+  replicaCount: 2

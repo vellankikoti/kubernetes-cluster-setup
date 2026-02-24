@@ -1,0 +1,13 @@
+provider: aws
+policy: sync
+txtOwnerId: multi-cloud-platform
+domainFilters:
+  - example.com
+serviceAccount:
+  create: true
+  name: external-dns
+sources:
+  - service
+  - ingress
+registry: txt
+interval: 1m

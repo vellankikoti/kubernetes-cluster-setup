@@ -1,0 +1,61 @@
+name: platform-ci
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  terraform-validate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        stack: [eks, gke, aks, vcluster]
+    defaults:
+      run:
+        working-directory: resource-creator/terraform/${{ matrix.stack }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.7.5
+
+      - name: Terraform fmt check
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init
+        run: terraform init -backend=false
+
+      - name: Terraform validate
+        run: terraform validate
+
+  kubeconform:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install kubeconform
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar -xz
+          sudo mv kubeconform /usr/local/bin/kubeconform
+
+      - name: Validate manifests
+        run: |
+          find resource-creator/common-resources resource-creator/addons -type f \( -name '*.yaml' -o -name '*.yml' \) \
+            ! -name '*values.yaml' ! -name '*values.yml' -print0 | xargs -0 -n1 kubeconform -strict
+
+  script-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Lint scripts
+        run: shellcheck resource-creator/scripts/*.sh

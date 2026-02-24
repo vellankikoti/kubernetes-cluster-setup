@@ -1,0 +1,41 @@
+{
+  "title": "Kubernetes Platform Overview",
+  "uid": "k8s-platform-overview",
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Cluster CPU Usage",
+      "targets": [
+        {
+          "expr": "sum(rate(container_cpu_usage_seconds_total{container!=\"\",image!=\"\"}[5m]))",
+          "legendFormat": "cpu cores"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Cluster Memory Working Set",
+      "targets": [
+        {
+          "expr": "sum(container_memory_working_set_bytes{container!=\"\",image!=\"\"})",
+          "legendFormat": "bytes"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+    },
+    {
+      "type": "stat",
+      "title": "Pending Pods",
+      "targets": [
+        {
+          "expr": "count(kube_pod_status_phase{phase=\"Pending\"} == 1)"
+        }
+      ],
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 8 }
+    }
+  ]
+}

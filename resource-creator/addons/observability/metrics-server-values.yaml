@@ -1,0 +1,11 @@
+args:
+  - --kubelet-preferred-address-types=InternalIP
+  - --kubelet-use-node-status-port
+replicas: 2
+resources:
+  requests:
+    cpu: 100m
+    memory: 200Mi
+  limits:
+    cpu: 200m
+    memory: 300Mi

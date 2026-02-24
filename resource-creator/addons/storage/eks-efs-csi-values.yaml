@@ -1,0 +1,12 @@
+controller:
+  serviceAccount:
+    create: false
+    name: efs-csi-controller-sa
+storageClasses:
+  - name: efs-sc
+    parameters:
+      provisioningMode: efs-ap
+      fileSystemId: fs-00000000000000000
+      directoryPerms: "700"
+    reclaimPolicy: Retain
+    volumeBindingMode: Immediate
