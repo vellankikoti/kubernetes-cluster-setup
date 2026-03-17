@@ -54,10 +54,6 @@ TARGET_CONTEXT=""
 
 AWS_PUBLIC_API_TEMP_ENABLED="false"
 cleanup() {
-  if [[ "$CLOUD" == "aws" && "$PUBLIC_API" == "true" && "$AWS_PUBLIC_API_TEMP_ENABLED" == "true" ]]; then
-    # Best practice: keep EKS API private by default. Public API is temporary for operator access only.
-    restore_eks_private_only "$CLUSTER_NAME" "$REGION" || true
-  fi
   if [[ -n "$PREV_CONTEXT" ]]; then
     kubectl config use-context "$PREV_CONTEXT" >/dev/null 2>&1 || true
   fi
@@ -75,20 +71,13 @@ if [[ "$CLOUD" == "aws" ]]; then
   aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$REGION" --alias "$CLUSTER_NAME" >/dev/null
 
   if ! kube_api_reachable; then
-    if [[ "$PUBLIC_API" == "true" ]]; then
-      CALLER_IP="$(get_public_ip)"
-      ensure_eks_public_api_access "$CLUSTER_NAME" "$REGION" "${CALLER_IP}/32"
-      AWS_PUBLIC_API_TEMP_ENABLED="true"
-      if ! wait_for_kube_api 36 10; then
-        echo "EKS API still unreachable after enabling temporary public endpoint."
-        echo "Likely DNS propagation or network egress restriction from this machine."
-        echo "Retry in 2-3 minutes, or run from a network with direct internet egress."
-        exit 1
-      fi
-    else
-      echo "Kubernetes API is unreachable. This EKS cluster is private-only."
-      echo "Run from a network path that can reach the VPC (VPN/bastion/private runner),"
-      echo "or re-run bootstrap with --public-api for temporary, CIDR-restricted access."
+    echo "Kubernetes API is unreachable. Ensuring public access is enabled..."
+    CALLER_IP="$(get_public_ip)"
+    ensure_eks_public_api_access "$CLUSTER_NAME" "$REGION" "${CALLER_IP}/32"
+    if ! wait_for_kube_api 36 10; then
+      echo "EKS API still unreachable after ensuring public endpoint access."
+      echo "Likely DNS propagation or network egress restriction from this machine."
+      echo "Retry in 2-3 minutes, or run from a network with direct internet egress."
       exit 1
     fi
   fi
@@ -129,12 +118,19 @@ kctl apply -f "${ROOT_DIR}/common-resources/resource-quotas.yaml"
 kctl apply -f "${ROOT_DIR}/common-resources/limit-ranges.yaml"
 kctl apply -f "${ROOT_DIR}/common-resources/pod-disruption-budgets.yaml"
 
+# Adjust replica count based on environment
+NGINX_REPLICAS="1"
+if [[ "$ENV_NAME" == "prod" ]]; then
+  NGINX_REPLICAS="3"
+fi
+
 if [[ -n "$NGINX_EXTRA_VALUES" ]]; then
   # shellcheck disable=SC2086
   helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
     -n ingress-nginx --create-namespace \
     --kube-context "$TARGET_CONTEXT" \
     -f "${ROOT_DIR}/addons/ingress/nginx-values.yaml" \
+    --set controller.replicaCount="${NGINX_REPLICAS}" \
     $NGINX_EXTRA_VALUES \
     --wait --timeout 15m
 else
@@ -142,14 +138,17 @@ else
     -n ingress-nginx --create-namespace \
     --kube-context "$TARGET_CONTEXT" \
     -f "${ROOT_DIR}/addons/ingress/nginx-values.yaml" \
+    --set controller.replicaCount="${NGINX_REPLICAS}" \
     --wait --timeout 15m
 fi
 
-helm upgrade --install metrics-server metrics-server/metrics-server \
-  -n kube-system \
-  --kube-context "$TARGET_CONTEXT" \
-  -f "${ROOT_DIR}/addons/observability/metrics-server-values.yaml" \
-  --wait --timeout 10m
+if [[ "$CLOUD" != "azure" ]]; then
+  helm upgrade --install metrics-server metrics-server/metrics-server \
+    -n kube-system \
+    --kube-context "$TARGET_CONTEXT" \
+    -f "${ROOT_DIR}/addons/observability/metrics-server-values.yaml" \
+    --wait --timeout 10m
+fi
 
 case "$CLOUD" in
   aws)
@@ -202,7 +201,9 @@ YAML
     kctl apply -f "${ROOT_DIR}/addons/storage/gke-pd-storageclass.yaml"
     ;;
   azure)
-    kctl apply -f "${ROOT_DIR}/addons/storage/aks-disk-file-storageclasses.yaml"
+    # Managed storage classes are pre-provisioned and immutable in AKS.
+    # We skip re-applying them to avoid Forbidden errors.
+    echo "Using managed Azure storage classes."
     ;;
   *)
     echo "invalid cloud: $CLOUD"
@@ -211,7 +212,9 @@ YAML
 esac
 
 kctl wait --for=condition=Available deployment/ingress-nginx-controller -n ingress-nginx --timeout=600s
-kctl wait --for=condition=Available deployment/metrics-server -n kube-system --timeout=600s
+if [[ "$CLOUD" != "azure" ]]; then
+  kctl wait --for=condition=Available deployment/metrics-server -n kube-system --timeout=600s
+fi
 
 if [[ "$CLOUD" == "aws" ]]; then
   kctl wait --for=condition=Available deployment/cluster-autoscaler -n kube-system --timeout=600s

@@ -91,7 +91,8 @@ module "eks" {
   cluster_name                             = "${var.base_name}-${each.key}-eks"
   cluster_version                          = var.cluster_version
   cluster_endpoint_private_access          = true
-  cluster_endpoint_public_access           = false
+  cluster_endpoint_public_access           = var.cluster_endpoint_public_access
+  cluster_endpoint_public_access_cidrs     = var.cluster_endpoint_public_access_cidrs
   enable_cluster_creator_admin_permissions = true
 
   vpc_id                   = module.vpc[each.key].vpc_id
@@ -264,6 +265,18 @@ resource "aws_eks_addon" "ebs_csi" {
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
 
+  configuration_values = jsonencode({
+    controller = {
+      replicaCount = each.key == "prod" ? 2 : 1
+      resources = {
+        requests = {
+          cpu    = "50m"
+          memory = "128Mi"
+        }
+      }
+    }
+  })
+
   timeouts {
     create = "45m"
     update = "45m"
@@ -281,6 +294,18 @@ resource "aws_eks_addon" "efs_csi" {
   service_account_role_arn    = module.irsa_efs_csi[each.key].iam_role_arn
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
+
+  configuration_values = jsonencode({
+    controller = {
+      replicaCount = each.key == "prod" ? 2 : 1
+      resources = {
+        requests = {
+          cpu    = "100m"
+          memory = "256Mi"
+        }
+      }
+    }
+  })
 
   timeouts {
     create = "45m"

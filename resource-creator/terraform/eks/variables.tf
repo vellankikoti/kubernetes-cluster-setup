@@ -31,3 +31,15 @@ variable "tags" {
     repo        = "resource-creator"
   }
 }
+
+variable "cluster_endpoint_public_access" {
+  type        = bool
+  description = "Enable public access to the EKS Kubernetes API endpoint"
+  default     = true
+}
+
+variable "cluster_endpoint_public_access_cidrs" {
+  type        = list(string)
+  description = "List of CIDR blocks which can access the Amazon EKS public API server endpoint"
+  default     = ["0.0.0.0/0"]
+}

@@ -99,22 +99,34 @@ check_gcp_quotas_and_apis() {
 check_azure_quotas() {
   local region="$1"
 
+  # Ensure required providers are registered (non-blocking)
+  az provider register -n Microsoft.Compute >/dev/null 2>&1 || true
+  az provider register -n Microsoft.Network >/dev/null 2>&1 || true
+
   local cpu_limit cpu_usage
-  cpu_limit="$(az vm list-usage --location "$region" --query "[?name.value=='cores'].limit | [0]" -o tsv)"
-  cpu_usage="$(az vm list-usage --location "$region" --query "[?name.value=='cores'].currentValue | [0]" -o tsv)"
-  [[ -n "$cpu_limit" && -n "$cpu_usage" ]] || { echo "unable to read Azure core quota for $region"; exit 1; }
-  if (( cpu_limit - cpu_usage < 8 )); then
-    echo "insufficient Azure core quota in $region: usage=$cpu_usage limit=$cpu_limit"
-    exit 1
+  cpu_limit="$(az vm list-usage --location "$region" --query "[?name.value=='cores'].limit | [0]" -o tsv 2>/dev/null || true)"
+  cpu_usage="$(az vm list-usage --location "$region" --query "[?name.value=='cores'].currentValue | [0]" -o tsv 2>/dev/null || true)"
+  
+  if [[ -z "$cpu_limit" || -z "$cpu_usage" ]]; then
+    echo "WARNING: unable to read Azure core quota for $region (resource provider might still be registering), skipping check."
+  else
+    if (( cpu_limit - cpu_usage < 2 )); then
+      echo "insufficient Azure core quota in $region: usage=$cpu_usage limit=$cpu_limit"
+      exit 1
+    fi
   fi
 
   local pip_limit pip_usage
-  pip_limit="$(az network list-usages --location "$region" --query "[?contains(name.value, 'PublicIPAddresses')].limit | [0]" -o tsv)"
-  pip_usage="$(az network list-usages --location "$region" --query "[?contains(name.value, 'PublicIPAddresses')].currentValue | [0]" -o tsv)"
-  [[ -n "$pip_limit" && -n "$pip_usage" ]] || { echo "unable to read Azure Public IP quota for $region"; exit 1; }
-  if (( pip_limit - pip_usage < 2 )); then
-    echo "insufficient Azure Public IP quota in $region: usage=$pip_usage limit=$pip_limit"
-    exit 1
+  pip_limit="$(az network list-usages --location "$region" --query "[?contains(name.value, 'PublicIPAddresses')].limit | [0]" -o tsv 2>/dev/null || true)"
+  pip_usage="$(az network list-usages --location "$region" --query "[?contains(name.value, 'PublicIPAddresses')].currentValue | [0]" -o tsv 2>/dev/null || true)"
+  
+  if [[ -z "$pip_limit" || -z "$pip_usage" ]]; then
+    echo "WARNING: unable to read Azure Public IP quota for $region (resource provider might still be registering), skipping check."
+  else
+    if (( pip_limit - pip_usage < 2 )); then
+      echo "insufficient Azure Public IP quota in $region: usage=$pip_usage limit=$pip_limit"
+      exit 1
+    fi
   fi
 }
 

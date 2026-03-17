@@ -11,3 +11,24 @@ controller:
     enabled: true
     serviceMonitor:
       enabled: true
+  tolerations:
+  - key: "CriticalAddonsOnly"
+    operator: "Exists"
+  - key: "spot"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+  nodeSelector:
+    kubernetes.io/os: linux
+
+  admissionWebhooks:
+    patch:
+      tolerations:
+      - key: "CriticalAddonsOnly"
+        operator: "Exists"
+      - key: "spot"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+      nodeSelector:
+        kubernetes.io/os: linux

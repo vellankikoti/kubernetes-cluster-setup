@@ -39,7 +39,7 @@ resource "azurerm_log_analytics_workspace" "law" {
   location            = var.region
   resource_group_name = azurerm_resource_group.rg[each.key].name
   sku                 = "PerGB2018"
-  retention_in_days   = each.key == "prod" ? 30 : 14
+  retention_in_days   = 30
 }
 
 resource "azurerm_kubernetes_cluster" "aks" {
@@ -49,20 +49,17 @@ resource "azurerm_kubernetes_cluster" "aks" {
   resource_group_name = azurerm_resource_group.rg[each.key].name
   dns_prefix          = "${var.base_name}-${each.key}"
   kubernetes_version  = var.cluster_version
-  private_cluster_enabled = true
+  private_cluster_enabled = false
   oidc_issuer_enabled     = true
   workload_identity_enabled = true
 
   default_node_pool {
     name                 = "system"
-    vm_size              = each.key == "prod" ? "Standard_D4s_v5" : "Standard_D2s_v5"
+    vm_size              = each.key == "prod" ? "Standard_D4s_v5" : "Standard_D2_v2"
     vnet_subnet_id       = azurerm_subnet.aks[each.key].id
     auto_scaling_enabled = true
     min_count            = each.value.min
     max_count            = each.value.max
-    zones                = ["1", "2", "3"]
-    os_disk_type         = "Managed"
-    os_disk_size_gb      = 128
     only_critical_addons_enabled = true
     upgrade_settings {
       max_surge = "33%"
@@ -94,20 +91,16 @@ resource "azurerm_kubernetes_cluster_node_pool" "spot" {
   for_each              = local.selected
   name                  = "spot"
   kubernetes_cluster_id = azurerm_kubernetes_cluster.aks[each.key].id
-  vm_size               = "Standard_D4ps_v5"
+  vm_size               = "Standard_D2_v2"
   auto_scaling_enabled  = true
   min_count             = each.key == "prod" ? 2 : 1
   max_count             = each.value.max * 2
   priority              = "Spot"
   eviction_policy       = "Delete"
   spot_max_price        = -1
-  zones                 = ["1", "2", "3"]
   node_labels = {
     workload = "stateless"
   }
   node_taints = ["spot=true:NoSchedule"]
   vnet_subnet_id = azurerm_subnet.aks[each.key].id
-  upgrade_settings {
-    max_surge = "33%"
-  }
 }

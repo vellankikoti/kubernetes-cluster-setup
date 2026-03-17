@@ -80,11 +80,17 @@ case "$CLOUD" in
     TF_VARS_FILE="${TMP_DIR}/vars.tfvars"
     TF_BACKEND_FILE="${TMP_DIR}/backend.hcl"
 
+    TF_PUBLIC_API="true"
+    if [[ "$PUBLIC_API" == "true" ]]; then
+      TF_PUBLIC_API="true"
+    fi
+
     cat > "$TF_VARS_FILE" <<TFVARS
-region          = "${REGION}"
-base_name       = "${BASE_NAME}"
-cluster_version = "1.34"
-environments    = ["${ENV_NAME}"]
+region                         = "${REGION}"
+base_name                      = "${BASE_NAME}"
+cluster_version                = "1.34"
+environments                   = ["${ENV_NAME}"]
+cluster_endpoint_public_access = ${TF_PUBLIC_API}
 TFVARS
 
     prepare_aws_backend "$CLUSTER_NAME" "$ENV_NAME" "$REGION" "$TF_BACKEND_FILE"
@@ -219,7 +225,7 @@ if [[ -z "$KUBE_CONTEXT" ]]; then
   KUBE_CONTEXT="$CLUSTER_NAME"
 fi
 
-K8S_VER="$(kubectl --context "$KUBE_CONTEXT" version -o jsonpath='{.serverVersion.gitVersion}')"
+K8S_VER="$(kubectl --context "$KUBE_CONTEXT" version -o json | jq -r '.serverVersion.gitVersion')"
 NODE_COUNT="$(kubectl --context "$KUBE_CONTEXT" get nodes --no-headers | wc -l | tr -d ' ')"
 NODES_OUT="$(kubectl --context "$KUBE_CONTEXT" get nodes -o wide)"
 INGRESS_ENDPOINT="$(echo "$VAL_OUT" | awk -F= '/^INGRESS_ENDPOINT=/{print $2}')"
