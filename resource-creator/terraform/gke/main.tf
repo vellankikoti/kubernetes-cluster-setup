@@ -1,9 +1,9 @@
 locals {
   env_config = {
-    dev     = { cidr = "10.30.0.0/20", min = 1, max = 6 }
-    qa      = { cidr = "10.31.0.0/20", min = 1, max = 6 }
-    staging = { cidr = "10.32.0.0/20", min = 2, max = 10 }
-    prod    = { cidr = "10.33.0.0/20", min = 3, max = 30 }
+    dev     = { cidr = "10.30.0.0/16", min = 1, max = 6 }
+    qa      = { cidr = "10.31.0.0/16", min = 1, max = 6 }
+    staging = { cidr = "10.32.0.0/16", min = 2, max = 10 }
+    prod    = { cidr = "10.33.0.0/16", min = 3, max = 30 }
   }
   selected = { for e in var.environments : e => local.env_config[e] }
 
@@ -22,7 +22,7 @@ resource "google_project_service" "required" {
   for_each                   = local.required_services
   project                    = var.project_id
   service                    = each.value
-  disable_dependent_services = true
+  disable_dependent_services = false
 }
 
 resource "google_compute_network" "vpc" {
@@ -40,12 +40,12 @@ resource "google_compute_subnetwork" "subnet" {
 
   secondary_ip_range {
     range_name    = "pods"
-    ip_cidr_range = cidrsubnet(each.value.cidr, 4, 8)
+    ip_cidr_range = cidrsubnet(each.value.cidr, 2, 2)
   }
 
   secondary_ip_range {
     range_name    = "services"
-    ip_cidr_range = cidrsubnet(each.value.cidr, 4, 9)
+    ip_cidr_range = cidrsubnet(each.value.cidr, 4, 12)
   }
 }
 
@@ -86,7 +86,7 @@ resource "google_container_cluster" "gke" {
   private_cluster_config {
     enable_private_nodes    = true
     enable_private_endpoint = var.enable_private_endpoint
-    master_ipv4_cidr_block  = cidrsubnet(each.value.cidr, 4, 10)
+    master_ipv4_cidr_block  = cidrsubnet(each.value.cidr, 12, 4000)
   }
 
   dynamic "master_authorized_networks_config" {
@@ -180,7 +180,7 @@ resource "google_container_node_pool" "spot" {
   }
 
   node_config {
-    machine_type = "t2a-standard-4"
+    machine_type = each.key == "prod" ? "e2-standard-4" : "e2-standard-2"
     image_type   = "COS_CONTAINERD"
     disk_size_gb = 100
     disk_type    = "pd-balanced"

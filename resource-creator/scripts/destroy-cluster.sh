@@ -41,6 +41,11 @@ if [[ -z "$CLOUD" || -z "$NAME" || -z "$ENV_NAME" || -z "$REGION" ]]; then
   exit 1
 fi
 
+if [[ ! "$ENV_NAME" =~ ^(dev|qa|staging|prod)$ ]]; then
+  echo "Invalid env: $ENV_NAME"
+  exit 1
+fi
+
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 TMP_DIR="$(mktemp -d)"
 LOCK_DIR="${ROOT_DIR}/scripts/.cluster-factory.lock"

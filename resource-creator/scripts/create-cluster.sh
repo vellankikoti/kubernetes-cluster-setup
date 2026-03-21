@@ -80,7 +80,7 @@ case "$CLOUD" in
     TF_VARS_FILE="${TMP_DIR}/vars.tfvars"
     TF_BACKEND_FILE="${TMP_DIR}/backend.hcl"
 
-    TF_PUBLIC_API="true"
+    TF_PUBLIC_API="false"
     if [[ "$PUBLIC_API" == "true" ]]; then
       TF_PUBLIC_API="true"
     fi

@@ -13,11 +13,13 @@ terraform {
 }
 
 provider "kubernetes" {
-  config_path = pathexpand(var.host_kubeconfig)
+  config_path    = pathexpand(var.host_kubeconfig)
+  config_context = var.host_kube_context != "" ? var.host_kube_context : null
 }
 
 provider "helm" {
   kubernetes {
-    config_path = pathexpand(var.host_kubeconfig)
+    config_path    = pathexpand(var.host_kubeconfig)
+    config_context = var.host_kube_context != "" ? var.host_kube_context : null
   }
 }

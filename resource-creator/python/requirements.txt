@@ -1,0 +1,8 @@
+boto3>=1.34.0
+google-cloud-container>=2.40.0
+google-cloud-compute>=1.18.0
+google-cloud-storage>=2.14.0
+azure-mgmt-containerservice>=30.0.0
+azure-mgmt-network>=26.0.0
+azure-mgmt-resource>=23.0.0
+azure-identity>=1.15.0

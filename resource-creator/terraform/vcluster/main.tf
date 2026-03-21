@@ -40,7 +40,7 @@ resource "helm_release" "vcluster" {
         }
         distro = {
           k8s = {
-            version = "v1.34.1"
+            version = "v${var.cluster_version}.1"
           }
         }
       }
